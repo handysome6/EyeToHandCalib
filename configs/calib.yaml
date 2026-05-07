@@ -1,0 +1,44 @@
+# Eye-to-hand calibration config
+
+# Path to a checkout of the JetsonReborn / JetsonReborn_rebar project that contains
+# both `broker/` (rectify + pcd) and `hik/` (stereo capture). Prepended to sys.path
+# at runtime by eye2hand.paths so we can `import broker.imgproc`, `import hik.hik_sync_cam`, etc.
+jetson_reborn_path: ~/workspace/ensightfful/JetsonReborn_rebar
+
+# Where pose datasets are written. Each pose lives under <data_root>/poses/<timestamp>/
+# camera_model.json and broker AI_DIR are also expected here by upstream config.py.
+data_root: ~/DCIM_AI
+
+# Robot
+robot:
+  ip: 192.168.58.2
+
+# ChArUco target rigidly mounted on the gripper.
+# Update these to match the printed/glued board you are actually using.
+board:
+  # cv2.aruco predefined dictionary name (see cv2.aruco.DICT_*)
+  dictionary: DICT_5X5_250
+  squares_x: 12          # number of chessboard squares along X
+  squares_y: 9           # number of chessboard squares along Y
+  square_length_m: 0.020 # side length of one chessboard square, meters
+  marker_length_m: 0.015 # side length of the embedded ArUco marker, meters
+
+# Capture acceptance: reject poses that are too close (in rotation) to any already captured.
+# Keeps the AX=XB problem well-conditioned.
+capture:
+  min_pose_diversity_deg: 10.0   # minimum rotation delta between any two stored poses
+  min_poses: 12                  # warn below this when solving
+  target_poses: 20               # suggested capture target
+
+# Depth-lifted target pose extraction.
+target_pose:
+  depth_patch_radius_px: 2       # half-window for median depth at each corner
+  depth_min_m: 0.10
+  depth_max_m: 2.50
+  depth_neighbor_max_dev_m: 0.005  # reject corner if neighbours within patch disagree by more than this
+  min_valid_corners: 6             # below this, fall back to solvePnP only
+
+# Hand-eye solver
+handeye:
+  methods: [TSAI, PARK, DANIILIDIS]
+  output_filename: T_cam_base.json

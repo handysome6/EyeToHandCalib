@@ -1,0 +1,26 @@
+[project]
+name = "eye2hand"
+version = "0.1.0"
+description = "Eye-to-hand calibration for HIK stereo + Fairino arm using broker depth pipeline"
+readme = "README.md"
+authors = [
+    { name = "handysome6", email = "handysome6@gamil.com" }
+]
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "imageio>=2.37.3",
+    "loguru>=0.7.3",
+    "numpy>=2.4.4",
+    "omegaconf>=2.3.0",
+    "open3d>=0.19.0",
+    "opencv-contrib-python-headless>=4.8",
+    "pyside6==6.9.0",
+    "pyyaml>=6.0.3",
+    "requests>=2.33.1",
+    "scipy>=1.17.1",
+    "tqdm>=4.67.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.7,<0.10.0"]
+build-backend = "uv_build"
