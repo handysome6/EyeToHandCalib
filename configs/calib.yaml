@@ -17,11 +17,11 @@ robot:
 # Update these to match the printed/glued board you are actually using.
 board:
   # cv2.aruco predefined dictionary name (see cv2.aruco.DICT_*)
-  dictionary: DICT_5X5_250
+  dictionary: DICT_4X4_100
   squares_x: 12          # number of chessboard squares along X
   squares_y: 9           # number of chessboard squares along Y
-  square_length_m: 0.020 # side length of one chessboard square, meters
-  marker_length_m: 0.015 # side length of the embedded ArUco marker, meters
+  square_length_m: 0.024765 # side length of one chessboard square, meters
+  marker_length_m: 0.018574 # side length of the embedded ArUco marker, meters
 
 # Capture acceptance: reject poses that are too close (in rotation) to any already captured.
 # Keeps the AX=XB problem well-conditioned.

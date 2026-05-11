@@ -16,8 +16,11 @@ A ChArUco board is rigidly mounted on the end-effector. For each pose:
    3D-3D registration (Umeyama). Falls back to `solvePnP` if too few corners
    have valid depth.
 
-Once ~20 poses are captured we feed `(T_base_tcp, T_target_cam)` pairs to
-`cv2.calibrateHandEye` (eye-to-hand convention) to solve for `T_cam_base`.
+Once enough poses are captured we feed `(T_base_tcp, T_target_cam)` pairs to
+`cv2.calibrateHandEye` (eye-to-hand convention) to solve the fixed camera pose
+in the robot base frame. The output JSON keeps both directions:
+`T_cam_base` maps camera-frame points into the robot base frame, and
+`T_base_cam` is its inverse.
 
 ## Layout
 
@@ -27,6 +30,8 @@ src/eye2hand/                   # library code
 scripts/01_capture_pose.py      # interactive jog+ENTER capture loop
 scripts/02_process_dataset.py   # rectify + pcd + target-pose for every captured folder
 scripts/03_solve_handeye.py     # AX=XB, write T_cam_base.json
+scripts/04_calibrate_collected_dataset.py
+                                # one-shot solve for flat /Users/andyliu/DCIM_AI data
 data/poses/<id>/                # per-pose data (gitignored)
 ```
 
@@ -41,3 +46,17 @@ uv sync
 
 Edit `configs/calib.yaml` — at minimum set `jetson_reborn_path`, `robot.ip`, and
 the `board.*` dimensions to match your printed ChArUco target.
+
+## Existing DCIM_AI Dataset
+
+For the collected timestamp folders under `/Users/andyliu/DCIM_AI`, run:
+
+```sh
+python scripts/04_calibrate_collected_dataset.py --force-target
+```
+
+The script reads `/Users/andyliu/DCIM_AI/pose_data.md`, reuses the existing
+`img0.jpg`, `depth_meter.npy`, and `K.txt` files in each timestamp folder,
+writes per-sample `robot_pose.json` / `target_pose.json`, drops later samples
+with an identical TCP pose vector, and writes the calibration under
+`/Users/andyliu/DCIM_AI/handeye/`.

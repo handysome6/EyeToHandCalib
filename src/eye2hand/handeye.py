@@ -5,12 +5,13 @@ attached to the gripper) the standard hand-eye formulation
     A_i * X = X * B_i
 becomes, with cv2.calibrateHandEye's signature:
 
-    R_gripper2base, t_gripper2base   <-- inverted to get base->gripper
+    R_gripper2base, t_gripper2base   <-- inverted robot poses
     R_target2cam,   t_target2cam     <-- as-is
 
-and the returned X is `T_cam_base` (camera frame in robot base frame, i.e.
-the transform that takes a point expressed in the robot base and returns it
-in the camera frame's coordinates is its inverse — see `T_base_cam` below).
+The returned matrix is stored under the historical field name `T_cam_base`, but
+it is the camera pose in the robot base frame: it maps camera-frame points into
+base-frame coordinates (`^baseT_cam`). Its inverse, `T_base_cam`, maps base-frame
+points into camera-frame coordinates (`^camT_base`).
 
 We invert the gripper->base poses ourselves and pass the resulting list as
 "gripper2base" to OpenCV: that flips the equation into the eye-to-hand form.
@@ -48,8 +49,8 @@ _METHOD_MAP = {
 @dataclass
 class HandEyeSolution:
     method: str
-    T_cam_base: np.ndarray         # camera in base frame (4x4)
-    T_base_cam: np.ndarray         # inverse of the above
+    T_cam_base: np.ndarray         # camera pose in base frame: camera -> base (4x4)
+    T_base_cam: np.ndarray         # inverse: base -> camera
     rmse_translation_m: float      # mean |t_A X - X t_B| residual
     rmse_rotation_deg: float       # mean rotation residual on AX=XB closure
     n_pairs: int
@@ -73,9 +74,8 @@ def solve(
     if len(base_T_gripper) < 3:
         raise ValueError("hand-eye needs >=3 pose pairs (and ideally >=10)")
 
-    # Eye-to-hand: invert base->gripper to get gripper->base, then pass that
-    # as "gripper2base" (which is what OpenCV calls it). The result X is then
-    # T_cam_base.
+    # Eye-to-hand: invert base->gripper before passing it to OpenCV. With this
+    # convention the returned X is the fixed camera pose in the robot base frame.
     R_g2b, t_g2b = [], []
     for T_bg in base_T_gripper:
         T_gb = se3_inv(T_bg)
