@@ -16,9 +16,9 @@ This needs the JetsonReborn_rebar `hik` module on sys.path -- call
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -36,11 +36,21 @@ class StereoCapture:
         # loop. A QCoreApplication is enough (no GUI required).
         self._app = QCoreApplication.instance() or QCoreApplication(sys.argv)
 
-        from hik.hik_sync_cam import HikSyncedCameras  # type: ignore[import-not-found]
+        try:
+            from hik.hik_sync_cam import HikSyncedCameras  # type: ignore[import-not-found]
+        except SystemExit as e:
+            raise RuntimeError(
+                "HIK SDK import aborted. On macOS, verify MVCAM_SDK_PATH "
+                "points to the old MVS SDK root (default: /Library/MVS_SDK) "
+                "and run an x86_64 Python if the SDK dylibs are x86_64-only."
+            ) from e
 
         self._cams = HikSyncedCameras()
         logger.info("initializing HIK camera group...")
-        self._cams.initialize_camera_group()
+        try:
+            self._cams.initialize_camera_group()
+        except SystemExit as e:
+            raise RuntimeError("HIK camera initialization aborted") from e
         logger.info("HIK camera group ready")
 
     def __enter__(self) -> "StereoCapture":
@@ -87,3 +97,65 @@ class StereoCapture:
             self._cams._deinit_cameras()
         except Exception as e:
             logger.warning("camera deinit raised: {}", e)
+
+
+class MockStereoCapture:
+    """Writes deterministic placeholder stereo files for dry-run testing."""
+
+    def __init__(self, width: int = 1280, height: int = 720):
+        self.width = int(width)
+        self.height = int(height)
+        self._i = 0
+
+    def __enter__(self) -> "MockStereoCapture":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
+
+    def capture_one(self, out_root: Path | str, timeout_s: float = 10.0):
+        del timeout_s
+        import cv2
+        import numpy as np
+
+        out_root = Path(out_root)
+        out_root.mkdir(parents=True, exist_ok=True)
+        project_folder = self._new_project_folder(out_root)
+
+        x = np.linspace(0, 255, self.width, dtype=np.uint8)
+        y = np.linspace(0, 255, self.height, dtype=np.uint8)[:, None]
+        left = np.dstack([
+            np.tile(x, (self.height, 1)),
+            np.tile(y, (1, self.width)),
+            np.full((self.height, self.width), 80 + (self._i * 13) % 120, dtype=np.uint8),
+        ])
+        right = np.roll(left, shift=8, axis=1)
+        cv2.putText(left, f"mock left {self._i}", (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+        cv2.putText(right, f"mock right {self._i}", (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+
+        left_path = project_folder / "raw_left.jpg"
+        right_path = project_folder / "raw_right.jpg"
+        cv2.imwrite(str(left_path), left)
+        cv2.imwrite(str(right_path), right)
+
+        (project_folder / "camera_model.json").write_text(json.dumps({
+            "mock": True,
+            "width": self.width,
+            "height": self.height,
+            "note": "Placeholder only; not valid for calibration.",
+        }, indent=2))
+        self._i += 1
+        return project_folder, left_path, right_path
+
+    @staticmethod
+    def _new_project_folder(out_root: Path) -> Path:
+        while True:
+            project_folder = out_root / str(int(time.time() * 1e7))
+            try:
+                project_folder.mkdir(parents=True, exist_ok=False)
+                return project_folder
+            except FileExistsError:
+                time.sleep(0.001)
+
+    def close(self) -> None:
+        return None

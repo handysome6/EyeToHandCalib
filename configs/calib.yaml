@@ -5,9 +5,13 @@
 # at runtime by eye2hand.paths so we can `import broker.imgproc`, `import hik.hik_sync_cam`, etc.
 jetson_reborn_path: ~/workspace/ensightfful/JetsonReborn_rebar
 
-# Where pose datasets are written. Each pose lives under <data_root>/poses/<timestamp>/
-# camera_model.json and broker AI_DIR are also expected here by upstream config.py.
+# Upstream JetsonReborn stores/copies global camera metadata from this directory.
 data_root: ~/DCIM_AI
+
+# Default target folder for newly collected calibration samples. Each sample lives
+# directly under <poses_dir>/<timestamp>/ with raw_left.jpg, raw_right.jpg,
+# camera_model.json, and robot_pose.json.
+poses_dir: data/poses
 
 # Robot
 robot:

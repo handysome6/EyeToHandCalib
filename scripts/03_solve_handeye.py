@@ -50,11 +50,12 @@ def _load_pose_pair(pose_dir: Path) -> tuple[np.ndarray, np.ndarray] | None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=None, help="path to calib.yaml (default: configs/calib.yaml)")
+    ap.add_argument("--poses-dir", default=None, help="captured sample folder (default: config poses_dir)")
     ap.add_argument("--out", default=None, help="output dir (default: data/handeye)")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
-    poses_dir = cfg.poses_dir
+    poses_dir = Path(args.poses_dir).expanduser().resolve() if args.poses_dir else cfg.poses_dir
     if not poses_dir.exists():
         logger.error("no captured poses at {}", poses_dir)
         return 1

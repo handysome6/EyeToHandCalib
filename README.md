@@ -27,7 +27,7 @@ in the robot base frame. The output JSON keeps both directions:
 ```
 configs/calib.yaml              # robot IP, board, paths, thresholds
 src/eye2hand/                   # library code
-scripts/01_capture_pose.py      # interactive jog+ENTER capture loop
+scripts/01_capture_pose.py      # target-folder collection loop (live/mock/manual)
 scripts/02_process_dataset.py   # rectify + pcd + target-pose for every captured folder
 scripts/03_solve_handeye.py     # AX=XB, write T_cam_base.json
 scripts/04_calibrate_collected_dataset.py
@@ -46,6 +46,51 @@ uv sync
 
 Edit `configs/calib.yaml` — at minimum set `jetson_reborn_path`, `robot.ip`, and
 the `board.*` dimensions to match your printed ChArUco target.
+
+## Collect A New Dataset
+
+Live collection writes directly into the target folder. Each accepted sample is
+stored as `<target>/<timestamp>/` with `raw_left.jpg`, `raw_right.jpg`,
+`camera_model.json`, and `robot_pose.json`; the target root also gets
+`dataset_info.json`, `manifest.jsonl`, and `pose_data.md`.
+
+```sh
+uv run python scripts/01_capture_pose.py \
+  --out /Users/andyliu/DCIM_AI/eye2hand_run_001 \
+  --count 20
+```
+
+For a hardware-free logic check:
+
+```sh
+uv run python scripts/01_capture_pose.py \
+  --dry-run --auto --count 3 \
+  --out /tmp/eye2hand_collect_dryrun
+```
+
+Useful collection modes:
+
+- `--robot-mode live` reads Fairino `GetActualTCPPose(0)` from `robot.ip`.
+- `--robot-mode manual` lets you paste `[x_mm, y_mm, z_mm, rx_deg, ry_deg, rz_deg]`.
+- `--camera-mode live` uses `JetsonReborn_rebar/hik.HikSyncedCameras`.
+- `--camera-mode none` records TCP-only pose folders.
+- `--dry-run` is `--robot-mode mock --camera-mode mock`.
+
+On macOS, the updated HIK wrapper follows `hik.utils.load_hik_sdk()` in
+`JetsonReborn_rebar`. Set `MVCAM_SDK_PATH` only if the old MVS SDK is not at
+`/Library/MVS_SDK`; on Apple Silicon, use an x86_64 Python interpreter if the
+installed MVS dylibs are x86_64-only.
+
+Process and solve an arbitrary collection folder with:
+
+```sh
+uv run python scripts/02_process_dataset.py \
+  --poses-dir /Users/andyliu/DCIM_AI/eye2hand_run_001
+
+uv run python scripts/03_solve_handeye.py \
+  --poses-dir /Users/andyliu/DCIM_AI/eye2hand_run_001 \
+  --out /Users/andyliu/DCIM_AI/eye2hand_run_001/handeye
+```
 
 ## Existing DCIM_AI Dataset
 

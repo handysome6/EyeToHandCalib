@@ -34,6 +34,7 @@ from eye2hand.paths import prepare_paths
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=None, help="path to calib.yaml (default: configs/calib.yaml)")
+    ap.add_argument("--poses-dir", default=None, help="captured sample folder (default: config poses_dir)")
     ap.add_argument("--pcd-config", default=None, help="path to a broker pcd-config yaml (primary/fallback server URLs)")
     ap.add_argument("--only", default=None, help="process only this pose id (folder name under data/poses)")
     ap.add_argument("--force", action="store_true", help="re-run pose even if target_pose.json already exists")
@@ -47,7 +48,7 @@ def main() -> int:
     from eye2hand.pipeline import load_pcd_outputs, run_pcd, run_rectification  # noqa: E402
     from eye2hand.target_pose import compute_target_pose, save_target_pose  # noqa: E402
 
-    poses_dir = cfg.poses_dir
+    poses_dir = Path(args.poses_dir).expanduser().resolve() if args.poses_dir else cfg.poses_dir
     if not poses_dir.exists():
         logger.error("no captured poses at {}", poses_dir)
         return 1

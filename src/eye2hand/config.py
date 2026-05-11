@@ -57,19 +57,19 @@ class HandEyeCfg:
 class CalibConfig:
     jetson_reborn_path: Path
     data_root: Path
+    poses_dir: Path
     robot: RobotCfg
     board: BoardCfg
     capture: CaptureCfg
     target_pose: TargetPoseCfg
     handeye: HandEyeCfg
 
-    @property
-    def poses_dir(self) -> Path:
-        return REPO_ROOT / "data" / "poses"
 
-
-def _expand(p: str | Path) -> Path:
-    return Path(os.path.expandvars(os.path.expanduser(str(p)))).resolve()
+def _expand(p: str | Path, *, base: Path | None = None) -> Path:
+    out = Path(os.path.expandvars(os.path.expanduser(str(p))))
+    if base is not None and not out.is_absolute():
+        out = base / out
+    return out.resolve()
 
 
 def load_config(path: Optional[str | Path] = None) -> CalibConfig:
@@ -80,6 +80,7 @@ def load_config(path: Optional[str | Path] = None) -> CalibConfig:
     return CalibConfig(
         jetson_reborn_path=_expand(raw["jetson_reborn_path"]),
         data_root=_expand(raw["data_root"]),
+        poses_dir=_expand(raw.get("poses_dir", REPO_ROOT / "data" / "poses"), base=REPO_ROOT),
         robot=RobotCfg(**raw["robot"]),
         board=BoardCfg(**raw["board"]),
         capture=CaptureCfg(**raw["capture"]),
