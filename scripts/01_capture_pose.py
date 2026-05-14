@@ -32,7 +32,6 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from eye2hand.config import DEFAULT_CONFIG_PATH, load_config
 from eye2hand.geometry import fairino_pose_to_se3, relative_rotation_deg
-from eye2hand.paths import prepare_paths
 
 
 def _now_iso() -> str:
@@ -219,9 +218,6 @@ def main() -> int:
         camera_mode = "mock"
         robot_mode = "mock"
 
-    if camera_mode == "live":
-        prepare_paths(args.config)
-
     poses_dir = _resolve_path(args.out) if args.out else cfg.poses_dir
     poses_dir.mkdir(parents=True, exist_ok=True)
     existing, existing_ids = _existing_poses(poses_dir)
@@ -261,7 +257,7 @@ def main() -> int:
     cam = None
     if camera_mode == "live":
         from eye2hand.camera import StereoCapture
-        cam = StereoCapture()
+        cam = StereoCapture(cfg.jetson_reborn_path)
     elif camera_mode == "mock":
         from eye2hand.camera import MockStereoCapture
         cam = MockStereoCapture()

@@ -37,15 +37,55 @@ data/poses/<id>/                # per-pose data (gitignored)
 
 ## Setup
 
+### 1. This repository
+
 ```sh
 uv sync
-# Optional, for live capture only:
-#   pip install path/to/fairino-python-sdk
-#   ensure HIK MVS SDK is installed where hik.utils.load_hik_sdk() expects it
 ```
 
 Edit `configs/calib.yaml` — at minimum set `jetson_reborn_path`, `robot.ip`, and
 the `board.*` dimensions to match your printed ChArUco target.
+
+### 2. JetsonReborn_rebar (required for live capture and processing)
+
+Clone the `JetsonReborn_rebar` repo and point `jetson_reborn_path` in
+`configs/calib.yaml` to it. This repo uses JetsonReborn in two ways:
+
+- **Scripts 02/04 (processing):** import `broker` modules (rectification, PCD
+  generation) in-process via a `sys.path` injection. The broker dependencies
+  (`open3d`, `requests`, `imageio`, `omegaconf`, `tqdm`, etc.) are included in
+  this repo's `pyproject.toml`, so `uv sync` covers them.
+- **Script 01 (capture):** runs `hik/hik_capture_cli.py` as a **subprocess**
+  using JetsonReborn's own venv. This decouples the x86_64 HIK MVS SDK from the
+  host process — this repo runs native ARM64 Python while the capture subprocess
+  runs under Rosetta.
+
+### 3. macOS camera setup (required for `--camera-mode live`)
+
+The HIK MVS SDK ships x86_64-only dylibs. On Apple Silicon you need an x86_64
+Python venv inside JetsonReborn:
+
+```sh
+# Install the HIK MVS SDK (default: /Library/MVS_SDK).
+# Set MVCAM_SDK_PATH if installed elsewhere.
+
+cd /path/to/JetsonReborn_rebar
+uv venv --python cpython-3.11-macos-x86_64-none
+uv sync
+```
+
+Verify the capture CLI works standalone:
+
+```sh
+cd /path/to/JetsonReborn_rebar
+.venv/bin/python -m hik.hik_capture_cli --out /tmp/hik_test --timeout 10
+```
+
+### 4. Fairino SDK (required for `--robot-mode live`)
+
+```sh
+pip install path/to/fairino-python-sdk
+```
 
 ## Collect A New Dataset
 
@@ -72,14 +112,10 @@ Useful collection modes:
 
 - `--robot-mode live` reads Fairino `GetActualTCPPose(0)` from `robot.ip`.
 - `--robot-mode manual` lets you paste `[x_mm, y_mm, z_mm, rx_deg, ry_deg, rz_deg]`.
-- `--camera-mode live` uses `JetsonReborn_rebar/hik.HikSyncedCameras`.
+- `--camera-mode live` calls `hik/hik_capture_cli.py` in JetsonReborn's x86_64
+  venv as a subprocess.
 - `--camera-mode none` records TCP-only pose folders.
 - `--dry-run` is `--robot-mode mock --camera-mode mock`.
-
-On macOS, the updated HIK wrapper follows `hik.utils.load_hik_sdk()` in
-`JetsonReborn_rebar`. Set `MVCAM_SDK_PATH` only if the old MVS SDK is not at
-`/Library/MVS_SDK`; on Apple Silicon, use an x86_64 Python interpreter if the
-installed MVS dylibs are x86_64-only.
 
 Process and solve an arbitrary collection folder with:
 

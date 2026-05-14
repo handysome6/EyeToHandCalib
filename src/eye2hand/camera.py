@@ -1,22 +1,19 @@
-"""Headless wrapper around the existing HIK stereo camera stack.
+"""Stereo capture adapters for HIK cameras.
 
-Spins up a QCoreApplication-backed `HikSyncedCameras`, sends one software
-trigger per requested capture, and writes the resulting raw_left.jpg /
-raw_right.jpg / camera_model.json into a fresh project folder under
-data_root (HIK's `save_frames` already does the file/copy work for us).
+StereoCapture calls `hik/hik_capture_cli.py` inside the JetsonReborn_rebar
+checkout as a subprocess.  This decouples the x86_64 HIK MVS SDK from the
+host process — the caller can run on native ARM64 Python while the capture
+CLI runs under Rosetta with an x86_64 venv.
 
-Two patterns are supported:
-    with StereoCapture() as cam:
-        project_folder, raw_left, raw_right = cam.capture_one(out_root)
-        ...
-
-This needs the JetsonReborn_rebar `hik` module on sys.path -- call
-`prepare_paths()` first.
+    cam = StereoCapture(jetson_reborn_path)
+    project_folder, raw_left, raw_right = cam.capture_one(out_root)
+    cam.close()
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 from pathlib import Path
 
@@ -24,34 +21,19 @@ from loguru import logger
 
 
 class StereoCapture:
-    """Owns a HikSyncedCameras instance and a QCoreApplication for event pumping."""
+    """Subprocess-based stereo capture using JetsonReborn's hik_capture_cli."""
 
-    def __init__(self):
-        # PySide6 imports deferred so that `import eye2hand.camera` doesn't crash
-        # in test environments without Qt.
-        from PySide6.QtCore import QCoreApplication
-        import sys
-
-        # HikSyncedCameras emits cross-thread signals, so we need a Qt event
-        # loop. A QCoreApplication is enough (no GUI required).
-        self._app = QCoreApplication.instance() or QCoreApplication(sys.argv)
-
-        try:
-            from hik.hik_sync_cam import HikSyncedCameras  # type: ignore[import-not-found]
-        except SystemExit as e:
-            raise RuntimeError(
-                "HIK SDK import aborted. On macOS, verify MVCAM_SDK_PATH "
-                "points to the old MVS SDK root (default: /Library/MVS_SDK) "
-                "and run an x86_64 Python if the SDK dylibs are x86_64-only."
-            ) from e
-
-        self._cams = HikSyncedCameras()
-        logger.info("initializing HIK camera group...")
-        try:
-            self._cams.initialize_camera_group()
-        except SystemExit as e:
-            raise RuntimeError("HIK camera initialization aborted") from e
-        logger.info("HIK camera group ready")
+    def __init__(self, jetson_reborn_path: Path | str):
+        self._jr = Path(jetson_reborn_path).expanduser().resolve()
+        self._python = self._jr / ".venv" / "bin" / "python"
+        if not self._python.exists():
+            raise FileNotFoundError(
+                f"JetsonReborn x86_64 venv not found at {self._python}. "
+                f"Create it with: cd {self._jr} && uv venv --python cpython-3.11-macos-x86_64-none && uv sync"
+            )
+        cli = self._jr / "hik" / "hik_capture_cli.py"
+        if not cli.exists():
+            raise FileNotFoundError(f"hik_capture_cli.py not found at {cli}")
 
     def __enter__(self) -> "StereoCapture":
         return self
@@ -59,44 +41,39 @@ class StereoCapture:
     def __exit__(self, *args) -> None:
         self.close()
 
-    def _pump(self, ms: int = 5) -> None:
-        """Pump pending Qt events for `ms` ms."""
-        from PySide6.QtCore import QCoreApplication, QEventLoop
-
-        self._app.processEvents(QEventLoop.AllEvents, ms)
-
     def capture_one(self, out_root: Path | str, timeout_s: float = 10.0):
-        """Trigger one synced stereo pair and save it.
+        """Trigger one synced stereo capture via subprocess.
 
         Returns: (project_folder: Path, raw_left: Path, raw_right: Path)
         """
         out_root = Path(out_root)
         out_root.mkdir(parents=True, exist_ok=True)
 
-        # Reset frame buffers, send software trigger, wait for both frames.
-        self._cams.left_frame = None
-        self._cams.right_frame = None
-        self._cams.capture_dual_camera()
+        cmd = [
+            str(self._python), "-m", "hik.hik_capture_cli",
+            "--out", str(out_root),
+            "--timeout", str(timeout_s),
+        ]
+        proc = subprocess.run(
+            cmd,
+            cwd=str(self._jr),
+            capture_output=True,
+            text=True,
+            timeout=timeout_s + 30,
+        )
+        if proc.returncode != 0:
+            stderr = proc.stderr.strip()
+            raise RuntimeError(f"hik_capture_cli failed (rc={proc.returncode}): {stderr}")
 
-        deadline = time.time() + timeout_s
-        while time.time() < deadline:
-            self._pump(10)
-            if self._cams.left_frame is not None and self._cams.right_frame is not None:
-                break
-        else:
-            raise TimeoutError(f"stereo capture timed out after {timeout_s}s")
-
-        # save_frames creates a timestamped subfolder under out_root and copies
-        # camera_model.json from GLOBAL_CAM_PATH if it exists -- exactly the
-        # broker rectify input layout we want.
-        project_folder, left_path, right_path = self._cams.save_frames(out_root)
-        return Path(project_folder), Path(left_path), Path(right_path)
+        result = json.loads(proc.stdout.strip())
+        return (
+            Path(result["project_folder"]),
+            Path(result["raw_left"]),
+            Path(result["raw_right"]),
+        )
 
     def close(self) -> None:
-        try:
-            self._cams._deinit_cameras()
-        except Exception as e:
-            logger.warning("camera deinit raised: {}", e)
+        pass
 
 
 class MockStereoCapture:
