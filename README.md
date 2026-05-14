@@ -92,6 +92,50 @@ uv run python scripts/03_solve_handeye.py \
   --out /Users/andyliu/DCIM_AI/eye2hand_run_001/handeye
 ```
 
+## Output Structure
+
+### Phase 1 — Capture (`01_capture_pose.py`)
+
+```
+<target_folder>/
+├── dataset_info.json               # collection metadata (tool, modes, config, timestamps)
+├── manifest.jsonl                  # one JSON line per accepted sample
+├── pose_data.md                    # human-readable pose log
+└── <timestamp>/                    # one per accepted capture
+    ├── robot_pose.json             # pose_mm_deg, T_base_tcp, timing, robot mode
+    ├── raw_left.jpg                # camera-mode live/mock only
+    ├── raw_right.jpg               # camera-mode live/mock only
+    └── camera_model.json           # camera-mode live/mock only
+```
+
+### Phase 2 — Process (`02_process_dataset.py`)
+
+Adds to each `<timestamp>/` folder:
+
+```
+<timestamp>/
+├── rect/                           # broker rectification output
+│   ├── rect_left.jpg
+│   └── rect_right.jpg
+├── pcd/                            # broker PCD output
+│   ├── img0.jpg                    # scaled rectified left (matches depth resolution)
+│   ├── img1.jpg                    # scaled rectified right
+│   ├── depth_meter.npy             # (H', W') float metric depth
+│   ├── K.txt                       # line 1: 9 floats (row-major K, full-res); line 2: baseline (m)
+│   ├── cloud.ply                   # point cloud
+│   └── vis.png                     # depth visualisation
+├── target_pose.json                # T_target_cam, method, corner counts, RMSE metrics
+└── target_pose_vis.png             # debug overlay (corners + coordinate axes on img0)
+```
+
+### Phase 3 — Solve (`03_solve_handeye.py`)
+
+```
+<output_dir>/                       # e.g. <target_folder>/handeye
+├── T_cam_base.json                 # best solution: T_cam_base, T_base_cam, RMSE, method, n_pairs
+└── handeye_summary.json            # all methods compared, pose IDs used, per-method metrics
+```
+
 ## Existing DCIM_AI Dataset
 
 For the collected timestamp folders under `/Users/andyliu/DCIM_AI`, run:
