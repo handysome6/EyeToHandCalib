@@ -23,7 +23,12 @@ from loguru import logger
 class StereoCapture:
     """Subprocess-based stereo capture using JetsonReborn's hik_capture_cli."""
 
-    def __init__(self, jetson_reborn_path: Path | str):
+    def __init__(
+        self,
+        jetson_reborn_path: Path | str,
+        exposure_us: float | None = None,
+        gain_db: float | None = None,
+    ):
         self._jr = Path(jetson_reborn_path).expanduser().resolve()
         self._python = self._jr / ".venv" / "bin" / "python"
         if not self._python.exists():
@@ -34,6 +39,8 @@ class StereoCapture:
         cli = self._jr / "hik" / "hik_capture_cli.py"
         if not cli.exists():
             raise FileNotFoundError(f"hik_capture_cli.py not found at {cli}")
+        self._exposure_us = exposure_us
+        self._gain_db = gain_db
 
     def __enter__(self) -> "StereoCapture":
         return self
@@ -54,6 +61,10 @@ class StereoCapture:
             "--out", str(out_root),
             "--timeout", str(timeout_s),
         ]
+        if self._exposure_us is not None:
+            cmd.extend(["--exp", str(self._exposure_us)])
+        if self._gain_db is not None:
+            cmd.extend(["--gain", str(self._gain_db)])
         proc = subprocess.run(
             cmd,
             cwd=str(self._jr),

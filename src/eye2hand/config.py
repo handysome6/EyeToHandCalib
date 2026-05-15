@@ -27,6 +27,12 @@ class BoardCfg:
 
 
 @dataclass
+class CameraCfg:
+    exposure_us: float | None = None
+    gain_db: float | None = None
+
+
+@dataclass
 class RobotCfg:
     ip: str
 
@@ -58,6 +64,7 @@ class CalibConfig:
     jetson_reborn_path: Path
     data_root: Path
     poses_dir: Path
+    camera: CameraCfg
     robot: RobotCfg
     board: BoardCfg
     capture: CaptureCfg
@@ -77,10 +84,12 @@ def load_config(path: Optional[str | Path] = None) -> CalibConfig:
     with open(cfg_path, "r") as f:
         raw = yaml.safe_load(f)
 
+    cam_raw = raw.get("camera") or {}
     return CalibConfig(
         jetson_reborn_path=_expand(raw["jetson_reborn_path"]),
         data_root=_expand(raw["data_root"]),
         poses_dir=_expand(raw.get("poses_dir", REPO_ROOT / "data" / "poses"), base=REPO_ROOT),
+        camera=CameraCfg(**cam_raw),
         robot=RobotCfg(**raw["robot"]),
         board=BoardCfg(**raw["board"]),
         capture=CaptureCfg(**raw["capture"]),

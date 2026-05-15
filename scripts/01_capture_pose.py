@@ -257,7 +257,11 @@ def main() -> int:
     cam = None
     if camera_mode == "live":
         from eye2hand.camera import StereoCapture
-        cam = StereoCapture(cfg.jetson_reborn_path)
+        cam = StereoCapture(
+            cfg.jetson_reborn_path,
+            exposure_us=cfg.camera.exposure_us,
+            gain_db=cfg.camera.gain_db,
+        )
     elif camera_mode == "mock":
         from eye2hand.camera import MockStereoCapture
         cam = MockStereoCapture()

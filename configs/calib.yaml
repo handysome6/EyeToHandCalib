@@ -13,6 +13,12 @@ data_root: ~/DCIM_AI
 # camera_model.json, and robot_pose.json.
 poses_dir: data/poses
 
+# Camera exposure / gain (applied to both left and right HIK cameras).
+# Set to null or omit to keep the camera's power-on defaults.
+camera:
+  exposure_us: 60000    # ExposureTime in microseconds (e.g. 5000 = 5 ms)
+  gain_db: 0.0        # Gain in dB
+
 # Robot
 robot:
   ip: 192.168.58.2
