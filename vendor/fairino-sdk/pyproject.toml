@@ -1,0 +1,9 @@
+[project]
+name = "fairino"
+version = "0.0.1"
+description = "Vendored fairino SDK (pure-Python Robot.py from FAIR-INNOVATION/fairino-python-sdk)"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

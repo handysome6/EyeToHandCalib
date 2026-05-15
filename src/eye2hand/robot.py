@@ -49,8 +49,10 @@ class RobotClient:
         """Returns Fairino-native pose: [x_mm, y_mm, z_mm, rx_deg, ry_deg, rz_deg]."""
         # GetActualTCPPose(flag): flag=0 typically means blocking read
         result = self._rpc.GetActualTCPPose(0)
-        # SDK returns (err_code, pose_list) on success, or just the list
-        # depending on version; handle both.
+        # SDK returns (err_code, pose_list) on success, or just the error code
+        # (single int) on failure.
+        if isinstance(result, (int, np.integer)):
+            raise RuntimeError(f"GetActualTCPPose failed with error code {result}")
         if (
             isinstance(result, (tuple, list))
             and len(result) == 2

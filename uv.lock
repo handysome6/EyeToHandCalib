@@ -165,6 +165,7 @@ name = "eye2hand"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fairino" },
     { name = "imageio" },
     { name = "loguru" },
     { name = "numpy" },
@@ -178,6 +179,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fairino", directory = "vendor/fairino-sdk" },
     { name = "imageio", specifier = ">=2.37.3" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "numpy", specifier = ">=2.4.4" },
@@ -188,6 +190,11 @@ requires-dist = [
     { name = "requests", specifier = ">=2.33.1" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
+
+[[package]]
+name = "fairino"
+version = "0.0.1"
+source = { directory = "vendor/fairino-sdk" }
 
 [[package]]
 name = "fastjsonschema"
