@@ -49,7 +49,8 @@ subprocess bridge needed.
 # Set MVCAM_SDK_PATH if installed elsewhere.
 
 uv venv --python cpython-3.11-macos-x86_64-none
-uv sync
+uv sync --index-url https://pypi.tuna.tsinghua.edu.cn/simple    # inside
+uv sync                                                         # outside
 ```
 
 Edit `configs/calib.yaml` — at minimum set `jetson_reborn_path`, `robot.ip`, and
