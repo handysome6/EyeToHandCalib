@@ -149,11 +149,8 @@ class CaptureWindow(QMainWindow):
         self.existing, self.existing_ids = _existing_poses(poses_dir)
         self.n_new = 0
 
-        self._charuco_board, self._aruco_dict = make_charuco(cfg.board)
-        self._charuco_detector = cv2.aruco.CharucoDetector(self._charuco_board)
-
         self._last_left_rgb: np.ndarray | None = None
-        self._last_n_corners = 0
+        self._last_right_rgb: np.ndarray | None = None
         self._capturing = False
 
         self._init_ui()
@@ -169,26 +166,51 @@ class CaptureWindow(QMainWindow):
 
     def _init_ui(self):
         self.setWindowTitle("Eye-to-Hand Calibration Capture")
-        self.setMinimumSize(960, 700)
+        self.setMinimumSize(1280, 700)
 
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        # preview
-        self._preview = QLabel()
-        self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview.setStyleSheet("background: #1a1a1a; border-radius: 4px;")
-        self._preview.setMinimumHeight(480)
-        layout.addWidget(self._preview, stretch=1)
+        # stereo preview (left + right side by side)
+        preview_row = QHBoxLayout()
+        preview_row.setSpacing(6)
+
+        self._preview_left = QLabel()
+        self._preview_left.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview_left.setStyleSheet("background: #1a1a1a; border-radius: 4px;")
+        self._preview_left.setMinimumHeight(400)
+
+        self._preview_right = QLabel()
+        self._preview_right.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview_right.setStyleSheet("background: #1a1a1a; border-radius: 4px;")
+        self._preview_right.setMinimumHeight(400)
+
+        lbl_left = QLabel("Left")
+        lbl_left.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_left.setStyleSheet("font-size: 11px; color: #888;")
+        lbl_right = QLabel("Right")
+        lbl_right.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_right.setStyleSheet("font-size: 11px; color: #888;")
+
+        left_col = QVBoxLayout()
+        left_col.addWidget(self._preview_left, stretch=1)
+        left_col.addWidget(lbl_left)
+
+        right_col = QVBoxLayout()
+        right_col.addWidget(self._preview_right, stretch=1)
+        right_col.addWidget(lbl_right)
+
+        preview_row.addLayout(left_col, stretch=1)
+        preview_row.addLayout(right_col, stretch=1)
+        layout.addLayout(preview_row, stretch=1)
 
         # status
         status_row = QHBoxLayout()
         self._lbl_progress = QLabel()
-        self._lbl_charuco = QLabel()
         self._lbl_diversity = QLabel()
-        for lbl in (self._lbl_progress, self._lbl_charuco, self._lbl_diversity):
+        for lbl in (self._lbl_progress, self._lbl_diversity):
             lbl.setStyleSheet("font-size: 13px; padding: 4px 8px;")
             status_row.addWidget(lbl)
         layout.addLayout(status_row)
@@ -218,54 +240,31 @@ class CaptureWindow(QMainWindow):
         if n >= self.target_total:
             self._lbl_progress.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #4caf50;")
 
-    def _detect_charuco(self, img_rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
-        gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
-        charuco_corners, charuco_ids, marker_corners, marker_ids = self._charuco_detector.detectBoard(gray)
-        vis = img_rgb.copy()
-
-        if marker_corners is not None and len(marker_corners) > 0:
-            cv2.aruco.drawDetectedMarkers(vis, marker_corners, marker_ids)
-
-        if charuco_corners is not None and charuco_ids is not None and len(charuco_ids) > 0:
-            cv2.aruco.drawDetectedCornersCharuco(vis, charuco_corners, charuco_ids, cornerColor=(0, 255, 0))
-            self._last_n_corners = len(charuco_ids)
-        else:
-            self._last_n_corners = 0
-
-        total_corners = (self.cfg.board.squares_x - 1) * (self.cfg.board.squares_y - 1)
-        if self._last_n_corners > 0:
-            self._lbl_charuco.setText(f"ChArUco: {self._last_n_corners}/{total_corners} corners")
-            self._lbl_charuco.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #4caf50;")
-        else:
-            self._lbl_charuco.setText("ChArUco: not detected")
-            self._lbl_charuco.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #f44336;")
-
-        return vis, charuco_corners, charuco_ids
-
     @Slot(object, object)
     def _on_frame(self, frame_type, frame: np.ndarray):
         from hik.hik_sync_cam import FrameType
-        if frame_type != FrameType.LEFT:
-            return
-        self._last_left_rgb = frame.copy()
-        vis, _, _ = self._detect_charuco(self._last_left_rgb)
-        self._show_preview(vis)
+        if frame_type == FrameType.LEFT:
+            self._last_left_rgb = frame.copy()
+            self._show_on_label(self._preview_left, self._last_left_rgb)
+        elif frame_type == FrameType.RIGHT:
+            self._last_right_rgb = frame.copy()
+            self._show_on_label(self._preview_right, self._last_right_rgb)
 
     def _on_mock_frame(self, frame_rgb: np.ndarray):
         self._last_left_rgb = frame_rgb.copy()
-        vis, _, _ = self._detect_charuco(self._last_left_rgb)
-        self._show_preview(vis)
+        self._show_on_label(self._preview_left, frame_rgb)
+        self._show_on_label(self._preview_right, frame_rgb)
 
-    def _show_preview(self, img_rgb: np.ndarray):
-        preview_w = self._preview.width()
-        preview_h = self._preview.height()
-        if preview_w < 10 or preview_h < 10:
+    def _show_on_label(self, label: QLabel, img_rgb: np.ndarray):
+        lw = label.width()
+        lh = label.height()
+        if lw < 10 or lh < 10:
             return
         h, w = img_rgb.shape[:2]
-        scale = min(preview_w / w, preview_h / h)
+        scale = min(lw / w, lh / h)
         new_w, new_h = int(w * scale), int(h * scale)
         resized = cv2.resize(img_rgb, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        self._preview.setPixmap(_np_to_qpixmap(resized))
+        label.setPixmap(_np_to_qpixmap(resized))
 
     @Slot()
     def _on_capture_click(self):
