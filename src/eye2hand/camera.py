@@ -65,7 +65,13 @@ class StereoCapture:
             stderr = proc.stderr.strip()
             raise RuntimeError(f"hik_capture_cli failed (rc={proc.returncode}): {stderr}")
 
-        result = json.loads(proc.stdout.strip())
+        # The HIK SDK prints debug text to stdout before the JSON result.
+        # Extract the last JSON object from the output.
+        stdout = proc.stdout.strip()
+        json_start = stdout.rfind("{")
+        if json_start == -1:
+            raise RuntimeError(f"no JSON in hik_capture_cli output: {stdout[:200]}")
+        result = json.loads(stdout[json_start:])
         return (
             Path(result["project_folder"]),
             Path(result["raw_left"]),
