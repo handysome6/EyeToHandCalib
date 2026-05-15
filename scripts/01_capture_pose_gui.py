@@ -301,7 +301,9 @@ class CaptureWindow(QMainWindow):
         try:
             if self.robot_mode == "live":
                 from eye2hand.robot import RobotClient
-                self.robot = RobotClient(self.cfg.robot.ip)
+                client = RobotClient(self.cfg.robot.ip)
+                client.read_pose_raw()
+                self.robot = client
             elif self.robot_mode == "mock":
                 from eye2hand.robot import MockRobotClient
                 self.robot = MockRobotClient(start_index=len(self.existing))
