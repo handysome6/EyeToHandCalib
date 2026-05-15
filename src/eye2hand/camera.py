@@ -93,6 +93,105 @@ class StereoCapture:
         pass
 
 
+class DirectStereoCapture:
+    """In-process stereo capture using HikSyncedCameras directly.
+
+    Requires an x86_64 Python venv (Rosetta) so the HIK MVS SDK loads natively.
+    Must be used inside a running QApplication.
+    """
+
+    def __init__(
+        self,
+        jetson_reborn_path: Path | str,
+        exposure_us: float | None = None,
+        gain_db: float | None = None,
+    ):
+        import sys
+        jr = Path(jetson_reborn_path).expanduser().resolve()
+        if str(jr) not in sys.path:
+            sys.path.insert(0, str(jr))
+
+        from hik.hik_sync_cam import HikSyncedCameras, FrameType
+
+        self._cams = HikSyncedCameras()
+        self._cams.initialize_camera_group()
+
+        if exposure_us is not None and gain_db is not None:
+            self._cams.set_exp_gain(exposure_us, gain_db)
+        elif exposure_us is not None:
+            self._cams.set_exp(exposure_us)
+        elif gain_db is not None:
+            self._cams.set_gain(gain_db)
+
+        self._FrameType = FrameType
+        self._streaming = False
+
+    @property
+    def cameras(self):
+        return self._cams
+
+    @property
+    def frame_signal(self):
+        return self._cams.frame_signal
+
+    @property
+    def FrameType(self):
+        return self._FrameType
+
+    def start_streaming(self) -> None:
+        if not self._streaming:
+            self._cams.start_streaming(enable_monitoring=False)
+            self._streaming = True
+
+    def stop_streaming(self) -> None:
+        if self._streaming:
+            self._cams.stop_streaming()
+            self._streaming = False
+
+    def capture_one(self, out_root: Path | str, timeout_s: float = 10.0):
+        """Capture and save one synced stereo pair.
+
+        Returns: (project_folder: Path, raw_left: Path, raw_right: Path)
+        """
+        import time
+        from PySide6.QtCore import QCoreApplication, QEventLoop
+
+        app = QCoreApplication.instance()
+        was_streaming = self._streaming
+        if was_streaming:
+            self.stop_streaming()
+            time.sleep(0.15)
+
+        self._cams.left_frame = None
+        self._cams.right_frame = None
+        self._cams.capture_dual_camera()
+
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if app:
+                app.processEvents(QEventLoop.AllEvents, 10)
+            if self._cams.left_frame is not None and self._cams.right_frame is not None:
+                break
+        else:
+            if was_streaming:
+                self.start_streaming()
+            raise RuntimeError(f"capture timed out after {timeout_s}s")
+
+        project_folder, left_path, right_path = self._cams.save_frames(out_root)
+
+        if was_streaming:
+            self.start_streaming()
+
+        return project_folder, left_path, right_path
+
+    def close(self) -> None:
+        self.stop_streaming()
+        try:
+            self._cams._deinit_cameras()
+        except Exception:
+            pass
+
+
 class MockStereoCapture:
     """Writes deterministic placeholder stereo files for dry-run testing."""
 

@@ -27,7 +27,8 @@ in the robot base frame. The output JSON keeps both directions:
 ```
 configs/calib.yaml              # robot IP, board, paths, thresholds
 src/eye2hand/                   # library code
-scripts/01_capture_pose.py      # target-folder collection loop (live/mock/manual)
+scripts/01_capture_pose_gui.py  # Qt GUI with live preview + charuco overlay (primary)
+scripts/01_capture_pose.py      # terminal-based collection loop (legacy fallback)
 scripts/02_process_dataset.py   # rectify + pcd + target-pose for every captured folder
 scripts/03_solve_handeye.py     # AX=XB, write T_cam_base.json
 scripts/04_calibrate_collected_dataset.py
@@ -37,9 +38,17 @@ data/poses/<id>/                # per-pose data (gitignored)
 
 ## Setup
 
-### 1. This repository
+### 1. This repository (x86_64 venv via Rosetta)
+
+The HIK MVS SDK ships x86_64-only dylibs. This repo runs entirely under Rosetta
+so the SDK, Qt GUI, and capture all share a single process — no cross-arch
+subprocess bridge needed.
 
 ```sh
+# Install the HIK MVS SDK first (default: /Library/MVS_SDK).
+# Set MVCAM_SDK_PATH if installed elsewhere.
+
+uv venv --python cpython-3.11-macos-x86_64-none
 uv sync
 ```
 
@@ -49,39 +58,19 @@ the `board.*` dimensions to match your printed ChArUco target.
 ### 2. JetsonReborn_rebar (required for live capture and processing)
 
 Clone the `JetsonReborn_rebar` repo and point `jetson_reborn_path` in
-`configs/calib.yaml` to it. This repo uses JetsonReborn in two ways:
+`configs/calib.yaml` to it. This repo imports JetsonReborn modules in-process
+via a `sys.path` injection:
 
 - **Scripts 02/04 (processing):** import `broker` modules (rectification, PCD
-  generation) in-process via a `sys.path` injection. The broker dependencies
-  (`open3d`, `requests`, `imageio`, `omegaconf`, `tqdm`, etc.) are included in
-  this repo's `pyproject.toml`, so `uv sync` covers them.
-- **Script 01 (capture):** runs `hik/hik_capture_cli.py` as a **subprocess**
-  using JetsonReborn's own venv. This decouples the x86_64 HIK MVS SDK from the
-  host process — this repo runs native ARM64 Python while the capture subprocess
-  runs under Rosetta.
+  generation). The broker dependencies (`open3d`, `requests`, `imageio`,
+  `omegaconf`, `tqdm`, etc.) are included in this repo's `pyproject.toml`, so
+  `uv sync` covers them.
+- **Script 01 GUI (capture):** imports `hik.hik_sync_cam.HikSyncedCameras`
+  directly for live preview and stereo capture.
+- **Script 01 CLI (capture):** runs `hik/hik_capture_cli.py` as a subprocess
+  (legacy fallback).
 
-### 3. macOS camera setup (required for `--camera-mode live`)
-
-The HIK MVS SDK ships x86_64-only dylibs. On Apple Silicon you need an x86_64
-Python venv inside JetsonReborn:
-
-```sh
-# Install the HIK MVS SDK (default: /Library/MVS_SDK).
-# Set MVCAM_SDK_PATH if installed elsewhere.
-
-cd /path/to/JetsonReborn_rebar
-uv venv --python cpython-3.11-macos-x86_64-none
-uv sync
-```
-
-Verify the capture CLI works standalone:
-
-```sh
-cd /path/to/JetsonReborn_rebar
-.venv/bin/python -m hik.hik_capture_cli --out /tmp/hik_test --timeout 10
-```
-
-### 4. Fairino SDK (required for `--robot-mode live`)
+### 3. Fairino SDK (required for `--robot-mode live`)
 
 ```sh
 pip install path/to/fairino-python-sdk
@@ -89,10 +78,25 @@ pip install path/to/fairino-python-sdk
 
 ## Collect A New Dataset
 
-Live collection writes directly into the target folder. Each accepted sample is
-stored as `<target>/<timestamp>/` with `raw_left.jpg`, `raw_right.jpg`,
-`camera_model.json`, and `robot_pose.json`; the target root also gets
-`dataset_info.json`, `manifest.jsonl`, and `pose_data.md`.
+### GUI capture (recommended)
+
+The Qt GUI shows a live camera preview with ChArUco corner detection overlay.
+Press **S** (or click **Capture**) to save a pose; press **Q** to quit.
+
+```sh
+uv run python scripts/01_capture_pose_gui.py \
+  --out /Users/andyliu/DCIM_AI/eye2hand_run_001
+```
+
+For a hardware-free test of the GUI:
+
+```sh
+uv run python scripts/01_capture_pose_gui.py --dry-run
+```
+
+### Terminal capture (legacy)
+
+The original terminal-based loop is still available:
 
 ```sh
 uv run python scripts/01_capture_pose.py \
@@ -100,21 +104,14 @@ uv run python scripts/01_capture_pose.py \
   --count 20
 ```
 
-For a hardware-free logic check:
-
-```sh
-uv run python scripts/01_capture_pose.py \
-  --dry-run --auto --count 3 \
-  --out /tmp/eye2hand_collect_dryrun
-```
-
-Useful collection modes:
+### Collection modes
 
 - `--robot-mode live` reads Fairino `GetActualTCPPose(0)` from `robot.ip`.
-- `--robot-mode manual` lets you paste `[x_mm, y_mm, z_mm, rx_deg, ry_deg, rz_deg]`.
-- `--camera-mode live` calls `hik/hik_capture_cli.py` in JetsonReborn's x86_64
-  venv as a subprocess.
-- `--camera-mode none` records TCP-only pose folders.
+- `--robot-mode manual` lets you paste `[x_mm, y_mm, z_mm, rx_deg, ry_deg, rz_deg]`
+  (terminal script only).
+- `--camera-mode live` uses `HikSyncedCameras` directly (GUI) or
+  `hik_capture_cli.py` subprocess (terminal).
+- `--camera-mode none` records TCP-only pose folders (terminal script only).
 - `--dry-run` is `--robot-mode mock --camera-mode mock`.
 
 Process and solve an arbitrary collection folder with:
@@ -130,7 +127,7 @@ uv run python scripts/03_solve_handeye.py \
 
 ## Output Structure
 
-### Phase 1 — Capture (`01_capture_pose.py`)
+### Phase 1 — Capture (`01_capture_pose_gui.py` / `01_capture_pose.py`)
 
 ```
 <target_folder>/
