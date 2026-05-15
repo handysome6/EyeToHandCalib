@@ -127,8 +127,6 @@ class CaptureWindow(QMainWindow):
     def __init__(
         self,
         cfg,
-        cam,
-        robot,
         *,
         poses_dir: Path,
         min_rotation_deg: float,
@@ -138,8 +136,8 @@ class CaptureWindow(QMainWindow):
     ):
         super().__init__()
         self.cfg = cfg
-        self.cam = cam
-        self.robot = robot
+        self.cam = None
+        self.robot = None
         self.poses_dir = poses_dir
         self.min_rotation_deg = min_rotation_deg
         self.target_total = target_total
@@ -154,15 +152,7 @@ class CaptureWindow(QMainWindow):
         self._capturing = False
 
         self._init_ui()
-
-        if hasattr(cam, "frame_signal"):
-            cam.frame_signal.connect(self._on_frame)
-            cam.start_streaming()
-
-        if hasattr(cam, "_mock_timer"):
-            cam._frame_callback = self._on_mock_frame
-
-        self._update_status()
+        self._update_connection_ui()
 
     def _init_ui(self):
         self.setWindowTitle("Eye-to-Hand Calibration Capture")
@@ -206,6 +196,27 @@ class CaptureWindow(QMainWindow):
         preview_row.addLayout(right_col, stretch=1)
         layout.addLayout(preview_row, stretch=1)
 
+        # connection row
+        conn_row = QHBoxLayout()
+        self._btn_connect_robot = QPushButton("Connect Robot")
+        self._btn_connect_robot.setStyleSheet("font-size: 13px; padding: 6px 16px;")
+        self._btn_connect_robot.clicked.connect(self._on_connect_robot)
+        self._lbl_robot_status = QLabel()
+        self._lbl_robot_status.setStyleSheet("font-size: 13px; padding: 4px 8px;")
+
+        self._btn_connect_camera = QPushButton("Connect Camera")
+        self._btn_connect_camera.setStyleSheet("font-size: 13px; padding: 6px 16px;")
+        self._btn_connect_camera.clicked.connect(self._on_connect_camera)
+        self._lbl_camera_status = QLabel()
+        self._lbl_camera_status.setStyleSheet("font-size: 13px; padding: 4px 8px;")
+
+        conn_row.addWidget(self._btn_connect_robot)
+        conn_row.addWidget(self._lbl_robot_status)
+        conn_row.addStretch()
+        conn_row.addWidget(self._btn_connect_camera)
+        conn_row.addWidget(self._lbl_camera_status)
+        layout.addLayout(conn_row)
+
         # status
         status_row = QHBoxLayout()
         self._lbl_progress = QLabel()
@@ -240,6 +251,104 @@ class CaptureWindow(QMainWindow):
         if n >= self.target_total:
             self._lbl_progress.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #4caf50;")
 
+    def _update_connection_ui(self):
+        if self.robot is not None:
+            self._lbl_robot_status.setText("Connected")
+            self._lbl_robot_status.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #4caf50;")
+            self._btn_connect_robot.setText("Reconnect Robot")
+        else:
+            self._lbl_robot_status.setText("Disconnected")
+            self._lbl_robot_status.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #f44336;")
+            self._btn_connect_robot.setText("Connect Robot")
+
+        if self.cam is not None:
+            self._lbl_camera_status.setText("Connected")
+            self._lbl_camera_status.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #4caf50;")
+            self._btn_connect_camera.setText("Reconnect Camera")
+        else:
+            self._lbl_camera_status.setText("Disconnected")
+            self._lbl_camera_status.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #f44336;")
+            self._btn_connect_camera.setText("Connect Camera")
+
+        can_capture = self.robot is not None and self.cam is not None
+        self._btn_capture.setEnabled(can_capture and not self._capturing)
+
+    def _start_camera_streaming(self):
+        if self.cam is None:
+            return
+        if hasattr(self.cam, "frame_signal"):
+            self.cam.frame_signal.connect(self._on_frame)
+            self.cam.start_streaming()
+        if hasattr(self.cam, "_mock_timer"):
+            self.cam._frame_callback = self._on_mock_frame
+            self.cam.start_streaming()
+
+    @Slot()
+    def _on_connect_robot(self):
+        self._btn_connect_robot.setEnabled(False)
+        self._lbl_robot_status.setText("Connecting...")
+        self._lbl_robot_status.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #ff9800;")
+        QTimer.singleShot(50, self._do_connect_robot)
+
+    def _do_connect_robot(self):
+        # close existing
+        if self.robot is not None:
+            close_fn = getattr(self.robot, "close", None)
+            if callable(close_fn):
+                close_fn()
+            self.robot = None
+
+        try:
+            if self.robot_mode == "live":
+                from eye2hand.robot import RobotClient
+                self.robot = RobotClient(self.cfg.robot.ip)
+            elif self.robot_mode == "mock":
+                from eye2hand.robot import MockRobotClient
+                self.robot = MockRobotClient(start_index=len(self.existing))
+            self._show_message("Robot connected")
+            logger.info("robot connected (mode={})", self.robot_mode)
+        except Exception as e:
+            self.robot = None
+            self._show_message(f"Robot connection failed: {e}", error=True)
+            logger.error("robot connection failed: {}", e)
+        finally:
+            self._btn_connect_robot.setEnabled(True)
+            self._update_connection_ui()
+
+    @Slot()
+    def _on_connect_camera(self):
+        self._btn_connect_camera.setEnabled(False)
+        self._lbl_camera_status.setText("Connecting...")
+        self._lbl_camera_status.setStyleSheet("font-size: 13px; padding: 4px 8px; color: #ff9800;")
+        QTimer.singleShot(50, self._do_connect_camera)
+
+    def _do_connect_camera(self):
+        # close existing
+        if self.cam is not None:
+            self.cam.close()
+            self.cam = None
+
+        try:
+            if self.camera_mode == "live":
+                from eye2hand.camera import DirectStereoCapture
+                self.cam = DirectStereoCapture(
+                    self.cfg.jetson_reborn_path,
+                    exposure_us=self.cfg.camera.exposure_us,
+                    gain_db=self.cfg.camera.gain_db,
+                )
+            else:
+                self.cam = MockStreamingCapture(self.cfg.board)
+            self._start_camera_streaming()
+            self._show_message("Camera connected")
+            logger.info("camera connected (mode={})", self.camera_mode)
+        except Exception as e:
+            self.cam = None
+            self._show_message(f"Camera connection failed: {e}", error=True)
+            logger.error("camera connection failed: {}", e)
+        finally:
+            self._btn_connect_camera.setEnabled(True)
+            self._update_connection_ui()
+
     @Slot(object, object)
     def _on_frame(self, frame_type, frame: np.ndarray):
         from hik.hik_sync_cam import FrameType
@@ -270,6 +379,9 @@ class CaptureWindow(QMainWindow):
     def _on_capture_click(self):
         if self._capturing:
             return
+        if self.robot is None or self.cam is None:
+            self._show_message("Connect robot and camera first", error=True)
+            return
         self._capturing = True
         self._btn_capture.setEnabled(False)
         self._lbl_message.setText("Capturing...")
@@ -285,7 +397,7 @@ class CaptureWindow(QMainWindow):
             self._show_message(f"Capture failed: {e}", error=True)
         finally:
             self._capturing = False
-            self._btn_capture.setEnabled(True)
+            self._update_connection_ui()
 
     def _capture_impl(self):
         # read robot pose
@@ -499,37 +611,16 @@ def main() -> int:
     existing, _ = _existing_poses(poses_dir)
     target_total = cfg.capture.target_poses
 
-    app = QApplication(sys.argv)
-
-    # robot
-    if robot_mode == "live":
-        from eye2hand.robot import RobotClient
-        robot = RobotClient(cfg.robot.ip)
-    elif robot_mode == "mock":
-        from eye2hand.robot import MockRobotClient
-        robot = MockRobotClient(start_index=len(existing))
-    else:
-        from scripts import _manual_robot_not_supported
+    if robot_mode == "manual":
         raise SystemExit("manual robot mode not supported in GUI; use terminal script instead")
 
-    # camera
-    if camera_mode == "live":
-        from eye2hand.camera import DirectStereoCapture
-        cam = DirectStereoCapture(
-            cfg.jetson_reborn_path,
-            exposure_us=cfg.camera.exposure_us,
-            gain_db=cfg.camera.gain_db,
-        )
-    else:
-        cam = MockStreamingCapture(cfg.board)
+    app = QApplication(sys.argv)
 
     logger.info("starting GUI capture -- {} existing pose(s) in {}", len(existing), poses_dir)
     logger.info("modes: robot={}, camera={}", robot_mode, camera_mode)
 
     win = CaptureWindow(
         cfg,
-        cam,
-        robot,
         poses_dir=poses_dir,
         min_rotation_deg=min_rotation_deg,
         target_total=target_total,
