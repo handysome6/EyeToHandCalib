@@ -89,7 +89,8 @@ def main() -> int:
                 if a_cands and d_cands:
                     rect_left = a_cands[0]
                     rect_right = d_cands[0]
-            run_pcd(rect_left, rect_right, cam_model, pcd_dir, pcd_config=args.pcd_config)
+            pcd_config = args.pcd_config or str(cfg.pcd_config)
+            run_pcd(rect_left, rect_right, cam_model, pcd_dir, pcd_config=pcd_config)
 
             pcd_outputs = load_pcd_outputs(pcd_dir, rect_dir=rect_dir)
             debug_dir = None if args.no_debug_vis else pd

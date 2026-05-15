@@ -64,6 +64,7 @@ class CalibConfig:
     jetson_reborn_path: Path
     data_root: Path
     poses_dir: Path
+    pcd_config: Path
     camera: CameraCfg
     robot: RobotCfg
     board: BoardCfg
@@ -85,10 +86,15 @@ def load_config(path: Optional[str | Path] = None) -> CalibConfig:
         raw = yaml.safe_load(f)
 
     cam_raw = raw.get("camera") or {}
+    jr_path = _expand(raw["jetson_reborn_path"])
+    default_pcd_config = jr_path / "configuration" / "pcd_conf.yaml"
+    pcd_config_raw = raw.get("pcd_config")
+    pcd_config = _expand(pcd_config_raw) if pcd_config_raw else default_pcd_config
     return CalibConfig(
-        jetson_reborn_path=_expand(raw["jetson_reborn_path"]),
+        jetson_reborn_path=jr_path,
         data_root=_expand(raw["data_root"]),
         poses_dir=_expand(raw.get("poses_dir", REPO_ROOT / "data" / "poses"), base=REPO_ROOT),
+        pcd_config=pcd_config,
         camera=CameraCfg(**cam_raw),
         robot=RobotCfg(**raw["robot"]),
         board=BoardCfg(**raw["board"]),
