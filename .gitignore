@@ -9,9 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Captured pose datasets (per-machine, large)
-data/poses/
-!data/poses/.gitkeep
+# Data (per-machine, large)
+data/
 
 # uv lockfiles are kept; ignore caches
 .uv/
