@@ -204,10 +204,10 @@ def _pose_diversity(records: list[PoseRecord]) -> dict:
 
 def _per_pose_residuals(records: list[PoseRecord], sol: HandEyeSolution) -> list[dict]:
     # Estimate the fixed target mount once, then predict target->camera for every pose.
-    gripper_T_target = se3_inv(records[0].base_T_gripper) @ sol.T_cam_base @ records[0].cam_T_target
+    gripper_T_target = se3_inv(records[0].base_T_gripper) @ sol.T_cam2base @ records[0].cam_T_target
     out = []
     for rec in records:
-        pred = sol.T_base_cam @ rec.base_T_gripper @ gripper_T_target
+        pred = sol.T_base2cam @ rec.base_T_gripper @ gripper_T_target
         out.append({
             "sample_id": rec.sample_id,
             "translation_error_m": residual_translation_m(pred, rec.cam_T_target),
@@ -219,8 +219,8 @@ def _per_pose_residuals(records: list[PoseRecord], sol: HandEyeSolution) -> list
 def _solution_payload(sol: HandEyeSolution) -> dict:
     return {
         "method": sol.method,
-        "T_cam_base": sol.T_cam_base.tolist(),
-        "T_base_cam": sol.T_base_cam.tolist(),
+        "T_cam2base": sol.T_cam2base.tolist(),
+        "T_base2cam": sol.T_base2cam.tolist(),
         "rmse_translation_m": float(sol.rmse_translation_m),
         "rmse_rotation_deg": float(sol.rmse_rotation_deg),
         "n_pairs": int(sol.n_pairs),

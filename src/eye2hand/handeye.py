@@ -8,10 +8,10 @@ becomes, with cv2.calibrateHandEye's signature:
     R_gripper2base, t_gripper2base   <-- inverted robot poses
     R_target2cam,   t_target2cam     <-- as-is
 
-The returned matrix is stored under the historical field name `T_cam_base`, but
-it is the camera pose in the robot base frame: it maps camera-frame points into
-base-frame coordinates (`^baseT_cam`). Its inverse, `T_base_cam`, maps base-frame
-points into camera-frame coordinates (`^camT_base`).
+Naming convention — T_{from}2{to}:
+
+    T_cam2base : maps camera-frame points → base-frame  (4×4)
+    T_base2cam : maps base-frame points → camera-frame  (inverse of above)
 
 We invert the gripper->base poses ourselves and pass the resulting list as
 "gripper2base" to OpenCV: that flips the equation into the eye-to-hand form.
@@ -49,8 +49,8 @@ _METHOD_MAP = {
 @dataclass
 class HandEyeSolution:
     method: str
-    T_cam_base: np.ndarray         # camera pose in base frame: camera -> base (4x4)
-    T_base_cam: np.ndarray         # inverse: base -> camera
+    T_cam2base: np.ndarray         # camera-frame → base-frame (4x4)
+    T_base2cam: np.ndarray         # base-frame → camera-frame (inverse)
     rmse_translation_m: float      # mean |t_A X - X t_B| residual
     rmse_rotation_deg: float       # mean rotation residual on AX=XB closure
     n_pairs: int
@@ -96,8 +96,8 @@ def solve(
         t_target2cam=t_t2c,
         method=_METHOD_MAP[method],
     )
-    T_cam_base = se3(np.asarray(R_X), np.asarray(t_X).reshape(3))
-    T_base_cam = se3_inv(T_cam_base)
+    T_cam2base = se3(np.asarray(R_X), np.asarray(t_X).reshape(3))
+    T_base2cam = se3_inv(T_cam2base)
 
     # Residuals: for each pair, compute the AX vs XB closure error.
     # Form: A_i X = X B_i  with A_i = T_g2b_i_to_j, B_i = T_t2c_i_to_j.
@@ -105,8 +105,8 @@ def solve(
     # Predict-vs-measured residual.
     #
     # Notation note: the variables are named after OpenCV's "AtoB" outputs, so
-    # `T_cam_base` here is the matrix that takes a CAM-frame point to BASE
-    # frame (cv2.calibrateHandEye's "cam2base" output), and `T_base_cam` is
+    # `T_cam2base` here is the matrix that takes a CAM-frame point to BASE
+    # frame (cv2.calibrateHandEye's "cam2base" output), and `T_base2cam` is
     # its inverse. Likewise `cam_T_target[i]` takes a TARGET-frame point to
     # CAM frame (the target2cam input), and `base_T_gripper[i]` takes a
     # GRIPPER-frame point to BASE frame.
@@ -115,16 +115,16 @@ def solve(
     #   target -> gripper -> base -> cam:
     #   target2cam_i = base2cam @ gripper2base_i @ target2gripper
     # i.e.
-    #   cam_T_target[i] = T_base_cam @ base_T_gripper[i] @ T_gripper_target
+    #   cam_T_target[i] = T_base2cam @ base_T_gripper[i] @ T_gripper_target
     #
     # Solve T_gripper_target ("target2gripper") from pose 0, then predict.
     n = len(base_T_gripper)
     T_gripper_target = (
-        se3_inv(base_T_gripper[0]) @ T_cam_base @ cam_T_target[0]
+        se3_inv(base_T_gripper[0]) @ T_cam2base @ cam_T_target[0]
     )
     t_errs, r_errs = [], []
     for i in range(1, n):
-        pred = T_base_cam @ base_T_gripper[i] @ T_gripper_target
+        pred = T_base2cam @ base_T_gripper[i] @ T_gripper_target
         t_errs.append(residual_translation_m(pred, cam_T_target[i]))
         r_errs.append(relative_rotation_deg(pred, cam_T_target[i]))
 
@@ -133,8 +133,8 @@ def solve(
 
     return HandEyeSolution(
         method=method,
-        T_cam_base=T_cam_base,
-        T_base_cam=T_base_cam,
+        T_cam2base=T_cam2base,
+        T_base2cam=T_base2cam,
         rmse_translation_m=rmse_t,
         rmse_rotation_deg=rmse_r,
         n_pairs=n,
@@ -167,8 +167,8 @@ def save_solution(sol: HandEyeSolution, out_path: Path | str) -> Path:
     out_path = Path(out_path)
     payload = {
         "method": sol.method,
-        "T_cam_base": sol.T_cam_base.tolist(),
-        "T_base_cam": sol.T_base_cam.tolist(),
+        "T_cam2base": sol.T_cam2base.tolist(),
+        "T_base2cam": sol.T_base2cam.tolist(),
         "rmse_translation_m": float(sol.rmse_translation_m),
         "rmse_rotation_deg": float(sol.rmse_rotation_deg),
         "n_pairs": int(sol.n_pairs),

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import open3d as o3d
 
-CALIB_FILE = Path(__file__).resolve().parents[1] / "data" / "0521calibration" / "T_cam_base.json"
+CALIB_FILE = Path(__file__).resolve().parents[1] / "data" / "0521calib_res" / "T_cam2base.json"
 
 
 def main():
@@ -24,8 +24,7 @@ def main():
 
     with open(CALIB_FILE) as f:
         data = json.load(f)
-    # Per handeye.py convention: "T_cam_base" maps camera-frame → base-frame
-    T_cam2base = np.array(data["T_cam_base"])
+    T_cam2base = np.array(data["T_cam2base"])
 
     pcd = o3d.io.read_point_cloud(str(input_path))
     points = np.asarray(pcd.points)
@@ -38,7 +37,7 @@ def main():
         pcd = pcd.select_by_index(np.where(valid)[0])
         points = np.asarray(pcd.points)
 
-    # Transform: P_base = T_base_cam @ P_cam (homogeneous)
+    # Transform: P_base = T_cam2base @ P_cam (homogeneous)
     ones = np.ones((len(points), 1))
     pts_h = np.hstack([points, ones])
     pts_base = (T_cam2base @ pts_h.T).T[:, :3]

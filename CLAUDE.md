@@ -2,12 +2,12 @@
 
 ## Transform naming convention
 
-The calibration JSON files (`T_cam_base.json`) use a **source-first** naming convention:
+The calibration JSON files (`T_cam2base.json`) use a `T_{from}2{to}` naming convention:
 
-- `T_cam_base` : camera-frame points -> base-frame (use this to transform point clouds from camera to robot base)
-- `T_base_cam` : base-frame points -> camera-frame (inverse of above)
+- `T_cam2base` : camera-frame points → base-frame (use this to transform point clouds from camera to robot base)
+- `T_base2cam` : base-frame points → camera-frame (inverse of above)
 
-The name reads as `T_{from}_{to}`. This is defined in `src/eye2hand/handeye.py`.
+Defined in `src/eye2hand/handeye.py`.
 
 ## Robot TCP pose format
 

@@ -5,7 +5,7 @@ Each pose folder must contain:
     robot_pose.json   -- Fairino TCP pose [x_mm, y_mm, z_mm, rx_deg, ry_deg, rz_deg]
     target_pose.json  -- written by 02_process_dataset.py (T_target_cam = target->cam)
 
-Outputs to data/handeye/T_cam_base.json plus a per-pair residual report.
+Outputs to data/handeye/T_cam2base.json plus a per-pair residual report.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ def main() -> int:
         "methods": [
             {
                 "method": s.method,
-                "T_cam_base": s.T_cam_base.tolist(),
+                "T_cam2base": s.T_cam2base.tolist(),
                 "rmse_translation_m": float(s.rmse_translation_m),
                 "rmse_rotation_deg": float(s.rmse_rotation_deg),
             }

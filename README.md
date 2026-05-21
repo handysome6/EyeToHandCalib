@@ -20,16 +20,12 @@ Once enough poses are captured we feed `(T_base_tcp, T_target_cam)` pairs to
 `cv2.calibrateHandEye` (eye-to-hand convention) to solve the fixed camera pose
 in the robot base frame. The output JSON keeps both directions:
 
-> **Naming convention (counterintuitive — read carefully):**
+> **Naming convention — `T_{from}2{to}`:**
 >
 > | JSON field    | Meaning                            | Use to …                        |
 > |---------------|------------------------------------|---------------------------------|
-> | `T_cam_base`  | camera-frame → base-frame (4×4)    | transform camera points to base |
-> | `T_base_cam`  | base-frame → camera-frame (4×4)    | transform base points to camera |
->
-> The name reads as the **source** listed first: `T_cam_base` takes **cam**-frame
-> points **to base**. This follows the `^dst T_src` (or `T_src_to_dst`) convention
-> used in `handeye.py`.
+> | `T_cam2base`  | camera-frame → base-frame (4×4)    | transform camera points to base |
+> | `T_base2cam`  | base-frame → camera-frame (4×4)    | transform base points to camera |
 
 ## Layout
 
@@ -39,7 +35,7 @@ src/eye2hand/                   # library code
 scripts/01_capture_pose_gui.py  # Qt GUI with live preview + charuco overlay (primary)
 scripts/01_capture_pose.py      # terminal-based collection loop (legacy fallback)
 scripts/02_process_dataset.py   # rectify + pcd + target-pose for every captured folder
-scripts/03_solve_handeye.py     # AX=XB, write T_cam_base.json
+scripts/03_solve_handeye.py     # AX=XB, write T_cam2base.json
 scripts/04_calibrate_collected_dataset.py
                                 # one-shot solve for flat /Users/andyliu/DCIM_AI data
 data/poses/<id>/                # per-pose data (gitignored)
@@ -175,7 +171,7 @@ Adds to each `<timestamp>/` folder:
 
 ```
 <output_dir>/                       # e.g. <target_folder>/handeye
-├── T_cam_base.json                 # best solution: T_cam_base, T_base_cam, RMSE, method, n_pairs
+├── T_cam2base.json                 # best solution: T_cam2base, T_base2cam, RMSE, method, n_pairs
 └── handeye_summary.json            # all methods compared, pose IDs used, per-method metrics
 ```
 

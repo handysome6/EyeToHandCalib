@@ -17,7 +17,7 @@ from scipy.spatial.transform import Rotation
 
 ROOT = Path(__file__).resolve().parents[1]
 TRAIN_DIR = ROOT / "data" / "train"
-CALIB_FILE = ROOT / "data" / "calibration" / "T_cam_base.json"
+CALIB_FILE = ROOT / "data" / "calibration" / "T_cam2base.json"
 SAMPLE_DIR = ROOT / "data" / "sample_data"
 OUTPUT_DIR = ROOT / "data" / "restructured"
 
@@ -36,10 +36,9 @@ POSE_MAP = [
 
 
 def load_T_cam2base() -> np.ndarray:
-    """Load the camera-frame -> base-frame transform (named T_cam_base in the JSON)."""
     with open(CALIB_FILE) as f:
         data = json.load(f)
-    return np.array(data["T_cam_base"])
+    return np.array(data["T_cam2base"])
 
 
 def transform_points(points: np.ndarray, T: np.ndarray) -> np.ndarray:

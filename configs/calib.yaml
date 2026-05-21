@@ -51,4 +51,4 @@ target_pose:
 # Hand-eye solver
 handeye:
   methods: [TSAI, PARK, DANIILIDIS]
-  output_filename: T_cam_base.json
+  output_filename: T_cam2base.json
