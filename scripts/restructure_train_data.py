@@ -18,6 +18,7 @@ from scipy.spatial.transform import Rotation
 ROOT = Path(__file__).resolve().parents[1]
 TRAIN_DIR = ROOT / "data" / "train"
 CALIB_FILE = ROOT / "data" / "calibration" / "T_cam_base.json"
+SAMPLE_DIR = ROOT / "data" / "sample_data"
 OUTPUT_DIR = ROOT / "data" / "restructured"
 
 POSE_MAP = [
@@ -59,26 +60,33 @@ def process_scene(scene_idx: int, T_cam2base: np.ndarray):
     ply_file = TRAIN_DIR / timestamp / "pcd" / "cloud.ply"
 
     demo_dir = OUTPUT_DIR / "data" / f"demo_{scene_idx}"
+    sample_demo = SAMPLE_DIR / "data" / f"demo_{scene_idx}"
     step0_dir = demo_dir / "step_0"
     step1_dir = demo_dir / "step_1"
 
     # Create directories
-    for subdir in ["grasp_pcd", "scene_pcd", "target_poses"]:
-        (step0_dir / subdir).mkdir(parents=True, exist_ok=True)
-    step1_dir.mkdir(parents=True, exist_ok=True)
+    for step_dir in [step0_dir, step1_dir]:
+        for subdir in ["grasp_pcd", "scene_pcd", "target_poses"]:
+            (step_dir / subdir).mkdir(parents=True, exist_ok=True)
 
     # --- demo metadata ---
     (demo_dir / "metadata.yaml").write_text("__type__: DemoSequence\nname: ''\n")
 
-    # --- step_0 metadata ---
+    # --- step metadata ---
     (step0_dir / "metadata.yaml").write_text("__type__: TargetPoseDemo\nname: pick\n")
+    (step1_dir / "metadata.yaml").write_text("__type__: TargetPoseDemo\nname: place\n")
 
-    # --- grasp_pcd: only metadata (no pcd data available) ---
-    (step0_dir / "grasp_pcd" / "metadata.yaml").write_text(
-        "__type__: PointCloud\nname: ''\nunit_length: 1 [m]\n"
-    )
+    # --- grasp_pcd: copy from sample_data for both steps ---
+    for step_name in ["step_0", "step_1"]:
+        src = sample_demo / step_name / "grasp_pcd"
+        dst = demo_dir / step_name / "grasp_pcd"
+        for fname in ["points.pt", "colors.pt"]:
+            shutil.copy2(src / fname, dst / fname)
+        (dst / "metadata.yaml").write_text(
+            "__type__: PointCloud\nname: ''\nunit_length: 1 [m]\n"
+        )
 
-    # --- scene_pcd: read ply, filter zeros, transform to base ---
+    # --- scene_pcd: read ply, filter zeros, transform to base (same for both steps) ---
     pcd = o3d.io.read_point_cloud(str(ply_file))
     points = np.asarray(pcd.points)
     colors = np.asarray(pcd.colors)
@@ -88,20 +96,17 @@ def process_scene(scene_idx: int, T_cam2base: np.ndarray):
     colors = colors[valid]
 
     points_base = transform_points(points, T_cam2base)
+    points_pt = torch.from_numpy(points_base)
+    colors_pt = torch.from_numpy(colors)
 
-    torch.save(
-        torch.from_numpy(points_base),
-        step0_dir / "scene_pcd" / "points.pt",
-    )
-    torch.save(
-        torch.from_numpy(colors),
-        step0_dir / "scene_pcd" / "colors.pt",
-    )
-    (step0_dir / "scene_pcd" / "metadata.yaml").write_text(
-        "__type__: PointCloud\nname: ''\nunit_length: 1 [m]\n"
-    )
+    for step_dir in [step0_dir, step1_dir]:
+        torch.save(points_pt, step_dir / "scene_pcd" / "points.pt")
+        torch.save(colors_pt, step_dir / "scene_pcd" / "colors.pt")
+        (step_dir / "scene_pcd" / "metadata.yaml").write_text(
+            "__type__: PointCloud\nname: ''\nunit_length: 1 [m]\n"
+        )
 
-    # --- target_poses: convert mm+euler to m+quaternion ---
+    # --- target_poses (step_0): convert mm+euler to m+quaternion ---
     with open(json_file) as f:
         pose_data = json.load(f)
 
@@ -121,8 +126,19 @@ def process_scene(scene_idx: int, T_cam2base: np.ndarray):
         "__type__: SE3\nname: ''\nunit_length: 1 [m]\n"
     )
 
+    # --- target_poses (step_1): copy from sample_data ---
+    src_step1_poses = sample_demo / "step_1" / "target_poses"
+    shutil.copy2(src_step1_poses / "poses.pt", step1_dir / "target_poses" / "poses.pt")
+    (step1_dir / "target_poses" / "metadata.yaml").write_text(
+        "__type__: SE3\nname: ''\nunit_length: 1 [m]\n"
+    )
+
+    n_grasp_pts = torch.load(
+        sample_demo / "step_0" / "grasp_pcd" / "points.pt", weights_only=True
+    ).shape[0]
     print(
         f"  demo_{scene_idx}: {points_base.shape[0]} scene points, "
+        f"{n_grasp_pts} grasp points, "
         f"{n_poses} poses (shape {list(poses_tensor.shape)})"
     )
 
