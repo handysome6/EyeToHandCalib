@@ -130,12 +130,16 @@ def main() -> int:
         pcd = pcd.voxel_down_sample(args.voxel_size)
         print(f"  After voxel downsample ({args.voxel_size}m): {len(pcd.points)} points")
 
-        # 3. Transform (optional)
+        # 3. Radius outlier removal
+        pcd, inlier_idx = pcd.remove_radius_outlier(nb_points=16, radius=args.voxel_size * 5)
+        print(f"  After outlier removal: {len(pcd.points)} points")
+
+        # 4. Transform (optional)
         if T_cam2base is not None:
             transform_points_inplace(pcd, T_cam2base)
             print("  Applied T_cam2base transform")
 
-        # 4. Save
+        # 5. Save
         o3d.io.write_point_cloud(str(ply_path), pcd)
         print(f"  Saved: {ply_path}")
 
