@@ -19,8 +19,17 @@ A ChArUco board is rigidly mounted on the end-effector. For each pose:
 Once enough poses are captured we feed `(T_base_tcp, T_target_cam)` pairs to
 `cv2.calibrateHandEye` (eye-to-hand convention) to solve the fixed camera pose
 in the robot base frame. The output JSON keeps both directions:
-`T_cam_base` maps camera-frame points into the robot base frame, and
-`T_base_cam` is its inverse.
+
+> **Naming convention (counterintuitive — read carefully):**
+>
+> | JSON field    | Meaning                            | Use to …                        |
+> |---------------|------------------------------------|---------------------------------|
+> | `T_cam_base`  | camera-frame → base-frame (4×4)    | transform camera points to base |
+> | `T_base_cam`  | base-frame → camera-frame (4×4)    | transform base points to camera |
+>
+> The name reads as the **source** listed first: `T_cam_base` takes **cam**-frame
+> points **to base**. This follows the `^dst T_src` (or `T_src_to_dst`) convention
+> used in `handeye.py`.
 
 ## Layout
 

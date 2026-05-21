@@ -2,7 +2,7 @@
 """Restructure train data into the sample_data format.
 
 Reads point clouds from data/train/{timestamp}/pcd/cloud.ply, transforms them
-to robot base coordinates using T_base_cam, and saves in the demo_N/step_0
+to robot base coordinates using T_cam2base, and saves in the demo_N/step_0
 folder structure alongside converted target poses.
 """
 
@@ -34,10 +34,11 @@ POSE_MAP = [
 ]
 
 
-def load_T_base_cam() -> np.ndarray:
+def load_T_cam2base() -> np.ndarray:
+    """Load the camera-frame -> base-frame transform (named T_cam_base in the JSON)."""
     with open(CALIB_FILE) as f:
         data = json.load(f)
-    return np.array(data["T_base_cam"])
+    return np.array(data["T_cam_base"])
 
 
 def transform_points(points: np.ndarray, T: np.ndarray) -> np.ndarray:
@@ -52,7 +53,7 @@ def euler_to_quat(rx_deg: float, ry_deg: float, rz_deg: float) -> np.ndarray:
     return r.as_quat()  # [qx, qy, qz, qw]
 
 
-def process_scene(scene_idx: int, T_base_cam: np.ndarray):
+def process_scene(scene_idx: int, T_cam2base: np.ndarray):
     timestamp = POSE_MAP[scene_idx]
     json_file = TRAIN_DIR / f"{scene_idx + 1:02d}.json"
     ply_file = TRAIN_DIR / timestamp / "pcd" / "cloud.ply"
@@ -86,7 +87,7 @@ def process_scene(scene_idx: int, T_base_cam: np.ndarray):
     points = points[valid]
     colors = colors[valid]
 
-    points_base = transform_points(points, T_base_cam)
+    points_base = transform_points(points, T_cam2base)
 
     torch.save(
         torch.from_numpy(points_base),
@@ -135,12 +136,12 @@ def main():
     ]
     (OUTPUT_DIR / "data.yaml").write_text("\n".join(entries) + "\n")
 
-    T_base_cam = load_T_base_cam()
-    print(f"Loaded T_base_cam from {CALIB_FILE}")
+    T_cam2base = load_T_cam2base()
+    print(f"Loaded T_cam2base from {CALIB_FILE}")
     print(f"Output: {OUTPUT_DIR}\n")
 
     for i in range(10):
-        process_scene(i, T_base_cam)
+        process_scene(i, T_cam2base)
 
     print("\nDone.")
 
