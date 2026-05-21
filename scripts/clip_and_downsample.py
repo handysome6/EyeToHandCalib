@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Clip point clouds by half-space planes and downsample.
 
-Optionally applies a T_cam2base calibration transform before clipping.
-Keeps points on the +Z or -Z side of each plane depending on configuration.
+Pipeline order: clip → downsample → transform (optional) → save.
+Clipping planes are defined in camera frame. The optional T_cam2base
+transform is applied after clipping and downsampling.
 
 Usage:
     # Camera-frame clipping (no transform):
@@ -54,6 +55,12 @@ PLANES = [
         [ 0.053775, -0.998087,  0.030516,  1.103597],
         [ 0.000000,  0.000000,  0.000000,  1.000000],
     ]), False),
+    (np.array([
+        [ 0.342020,  0.000000, -0.939693,  0.320387],
+        [ 0.000000,  1.000000,  0.000000,  0.000038],
+        [ 0.939693,  0.000000,  0.342020,  0.835964],
+        [ 0.000000,  0.000000,  0.000000,  1.000000],
+    ]), True),
 ]
 
 
@@ -114,19 +121,23 @@ def main() -> int:
         n_orig = len(pcd.points)
         print(f"  Original: {n_orig} points")
 
-        if T_cam2base is not None:
-            transform_points_inplace(pcd, T_cam2base)
-            print("  Applied T_cam2base transform")
-
+        # 1. Clip
         pcd = clip_by_planes(pcd, PLANES)
         n_clipped = len(pcd.points)
         print(f"  After clipping: {n_clipped} points")
 
+        # 2. Downsample
         if n_clipped > args.max_points:
             ratio = args.max_points / n_clipped
             pcd = pcd.random_down_sample(ratio)
             print(f"  Downsampled to {len(pcd.points)} points")
 
+        # 3. Transform (optional)
+        if T_cam2base is not None:
+            transform_points_inplace(pcd, T_cam2base)
+            print("  Applied T_cam2base transform")
+
+        # 4. Save
         o3d.io.write_point_cloud(str(ply_path), pcd)
         print(f"  Saved: {ply_path}")
 
