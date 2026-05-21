@@ -95,7 +95,7 @@ def main() -> int:
     ap.add_argument("--data-dir", required=True, help="directory containing */pcd/cloud.ply")
     ap.add_argument("--calib", default=None,
                     help="path to T_cam2base.json calibration file; if omitted, no transform is applied")
-    ap.add_argument("--max-points", type=int, default=100_000, help="max points after downsample (default: 100000)")
+    ap.add_argument("--voxel-size", type=float, default=0.0015, help="voxel size for downsampling in meters (default: 0.0015)")
     ap.add_argument("--glob", default="*/pcd/cloud.ply", help="glob pattern for PLY files (default: */pcd/cloud.ply)")
     args = ap.parse_args()
 
@@ -113,7 +113,7 @@ def main() -> int:
     else:
         print("No calibration file provided — clipping in camera frame")
 
-    print(f"Found {len(ply_paths)} point clouds, max_points={args.max_points}\n")
+    print(f"Found {len(ply_paths)} point clouds, voxel_size={args.voxel_size}\n")
 
     for ply_path in ply_paths:
         print(f"Processing: {ply_path}")
@@ -126,11 +126,9 @@ def main() -> int:
         n_clipped = len(pcd.points)
         print(f"  After clipping: {n_clipped} points")
 
-        # 2. Downsample
-        if n_clipped > args.max_points:
-            ratio = args.max_points / n_clipped
-            pcd = pcd.random_down_sample(ratio)
-            print(f"  Downsampled to {len(pcd.points)} points")
+        # 2. Voxel downsample
+        pcd = pcd.voxel_down_sample(args.voxel_size)
+        print(f"  After voxel downsample ({args.voxel_size}m): {len(pcd.points)} points")
 
         # 3. Transform (optional)
         if T_cam2base is not None:
