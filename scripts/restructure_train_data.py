@@ -1,11 +1,22 @@
 #!/usr/bin/env python
 """Restructure train data into the sample_data format.
 
-Reads point clouds from data/train/{timestamp}/pcd/cloud.ply, transforms them
-to robot base coordinates using T_cam2base, and saves in the demo_N/step_0
-folder structure alongside converted target poses.
+Reads point clouds from data/train/{timestamp}/pcd/cloud.ply and saves them
+in the demo_N/{step_0,step_1} folder structure alongside converted target poses.
+
+By default, point clouds are saved as-is (assumes they are already in robot
+base coordinates, e.g. via clip_and_downsample.py --calib). Use --calib to
+apply T_cam2base during this step instead.
+
+Usage:
+    # Point clouds already in base frame (transformed by clip_and_downsample.py):
+    python scripts/restructure_train_data.py
+
+    # Apply T_cam2base here:
+    python scripts/restructure_train_data.py --calib data/0521calib_res/T_cam2base.json
 """
 
+import argparse
 import json
 import shutil
 from pathlib import Path
@@ -17,7 +28,6 @@ from scipy.spatial.transform import Rotation
 
 ROOT = Path(__file__).resolve().parents[1]
 TRAIN_DIR = ROOT / "data" / "train"
-CALIB_FILE = ROOT / "data" / "calibration" / "T_cam2base.json"
 SAMPLE_DIR = ROOT / "data" / "sample_data"
 OUTPUT_DIR = ROOT / "data" / "restructured"
 
@@ -35,8 +45,8 @@ POSE_MAP = [
 ]
 
 
-def load_T_cam2base() -> np.ndarray:
-    with open(CALIB_FILE) as f:
+def load_T_cam2base(calib_path: Path) -> np.ndarray:
+    with open(calib_path) as f:
         data = json.load(f)
     return np.array(data["T_cam2base"])
 
@@ -53,7 +63,7 @@ def euler_to_quat(rx_deg: float, ry_deg: float, rz_deg: float) -> np.ndarray:
     return r.as_quat()  # [qx, qy, qz, qw]
 
 
-def process_scene(scene_idx: int, T_cam2base: np.ndarray):
+def process_scene(scene_idx: int, T_cam2base: np.ndarray | None):
     timestamp = POSE_MAP[scene_idx]
     json_file = TRAIN_DIR / f"{scene_idx + 1:02d}.json"
     ply_file = TRAIN_DIR / timestamp / "pcd" / "cloud.ply"
@@ -94,8 +104,9 @@ def process_scene(scene_idx: int, T_cam2base: np.ndarray):
     points = points[valid]
     colors = colors[valid]
 
-    points_base = transform_points(points, T_cam2base)
-    points_pt = torch.from_numpy(points_base)
+    if T_cam2base is not None:
+        points = transform_points(points, T_cam2base)
+    points_pt = torch.from_numpy(points)
     colors_pt = torch.from_numpy(colors)
 
     for step_dir in [step0_dir, step1_dir]:
@@ -136,13 +147,18 @@ def process_scene(scene_idx: int, T_cam2base: np.ndarray):
         sample_demo / "step_0" / "grasp_pcd" / "points.pt", weights_only=True
     ).shape[0]
     print(
-        f"  demo_{scene_idx}: {points_base.shape[0]} scene points, "
+        f"  demo_{scene_idx}: {points.shape[0]} scene points, "
         f"{n_grasp_pts} grasp points, "
         f"{n_poses} poses (shape {list(poses_tensor.shape)})"
     )
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Restructure train data into sample_data format")
+    ap.add_argument("--calib", default=None,
+                    help="path to T_cam2base.json; if omitted, point clouds are saved as-is")
+    args = ap.parse_args()
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Write top-level data.yaml
@@ -151,8 +167,14 @@ def main():
     ]
     (OUTPUT_DIR / "data.yaml").write_text("\n".join(entries) + "\n")
 
-    T_cam2base = load_T_cam2base()
-    print(f"Loaded T_cam2base from {CALIB_FILE}")
+    T_cam2base = None
+    if args.calib:
+        calib_path = Path(args.calib).expanduser().resolve()
+        T_cam2base = load_T_cam2base(calib_path)
+        print(f"Loaded T_cam2base from {calib_path}")
+    else:
+        print("No --calib provided, point clouds will be saved without transform")
+
     print(f"Output: {OUTPUT_DIR}\n")
 
     for i in range(10):
