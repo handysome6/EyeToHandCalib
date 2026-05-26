@@ -12,25 +12,19 @@ import numpy as np
 import open3d as o3d
 import torch
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-
-
 def main():
     if len(sys.argv) < 3:
-        print(f"Usage: {sys.argv[0]} <calib_folder> <input.ply> [output_prefix]")
-        print(f"\nAvailable calib folders in {DATA_DIR}:")
-        for d in sorted(DATA_DIR.glob("*calib_res")):
-            print(f"  {d.name}")
+        print(f"Usage: {sys.argv[0]} <calib_dir> <input.ply> [output_prefix]")
         sys.exit(1)
 
-    calib_folder = sys.argv[1]
+    calib_dir = Path(sys.argv[1])
     input_path = Path(sys.argv[2])
     if len(sys.argv) >= 4:
         out_prefix = Path(sys.argv[3])
     else:
         out_prefix = input_path.with_stem(input_path.stem + "_base").with_suffix("")
 
-    calib_file = DATA_DIR / calib_folder / "T_cam2base.json"
+    calib_file = calib_dir / "T_cam2base.json"
     print(f"Using calibration: {calib_file}")
 
     with open(calib_file) as f:
